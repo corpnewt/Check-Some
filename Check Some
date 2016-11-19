@@ -1,0 +1,209 @@
+#!/bin/bash
+
+# Turn on case-insensitive matching
+shopt -s nocasematch
+# turn on extended globbing
+shopt -s extglob
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd)"
+
+scriptName="Check Some - CorpNewt"
+url="https://raw.githubusercontent.com/notpeter/apple-installer-checksums/master/readme.md"
+localFile="checksums.txt"
+
+function main () {
+    clear
+	echo \#\#\# "$scriptName" \#\#\#
+	echo by CorpNewt
+	echo 
+    echo Please drag and drop your "Install OS X/macOS.app" here
+    echo or type the full path to continue:
+    echo
+    read sumPath
+    
+    if [[ -z "$sumPath" ]]; then
+        main "$1"
+    fi
+    
+    esdCheck="$( basename "$sumPath" )"
+    insESD=""
+
+    if [[ "$esdCheck" == "InstallESD.dmg" ]]; then
+        # We have an InstallESD.dmg - let's proceed accordingly
+        if [ ! -e "$sumPath" ]; then
+            quitMessage="$( cat << EOF
+Required files were missing:
+   "$sumPath"
+   Does not exist. )"
+            customQuit "$quitMessage"
+        fi
+        insESD="$sumPath"
+    else
+        # Not an InstallESD.dmg - let's check for one
+        if [ ! -e "$sumPath/Contents/SharedSupport/InstallESD.dmg" ]; then
+            quitMessage="$( cat << EOF
+Required files were missing in the installer:
+   "$sumPath/Contents/SharedSupport/InstallESD.dmg"
+   Does not exist. )"
+            customQuit "$quitMessage"
+        fi
+
+        insESD="$sumPath/Contents/SharedSupport/InstallESD.dmg"
+    fi
+    
+    if [[ -z "$insESD" ]]; then
+        # Didn't find anything
+        customQuit "Could not locate \"InstallESD.dmg\"."
+    fi
+    
+    # If we're here - we have a valid file
+    checksum "$insESD" "$1"
+}
+
+function checksum () {
+    clear
+	echo \#\#\# "$scriptName" \#\#\#
+	echo by CorpNewt
+	echo 
+    echo Getting SHA1 Checksum for:
+    echo "   $1..."
+    echo
+    shasum="$( shasum "$1" )"
+    
+    if [[ -z "$shasum" ]]; then
+        quitMessage="$( cat << EOF
+Could not get checksum for:
+   "$1" )"
+        customQuit "$quitMessage"
+    else
+        # Get only the checksum
+        shasum="$( echo "$shasum" | cut -d ' ' -f 1 )"
+    fi
+    
+    echo SHA1 Checksum is:  $shasum
+    echo
+    echo Parsing list...
+    echo
+    check="$( grep -y "$shasum" "$2" | cut -d '|' -f 2 )"
+    if [[ -z "$check" ]]; then
+        # Not found
+        quitMessage="$( cat << EOF
+Unknown OS X/macOS version:
+   "$shasum"
+   matched none of the entries in "$2." )"
+        customQuit "$quitMessage"
+    fi
+    # We found it - trim whitespace and display
+    check="$( trimWhitespace "$check" )"
+    
+    quitMessage="$( cat << EOF
+Located OS X/macOS version:
+   $check )"
+    customQuit "$quitMessage"
+}
+
+function trimWhitespace () {
+	# Trim leading and trailing whitespace
+    local var=$1
+    var=${var##+([[:space:]])}
+    var=${var%%+([[:space:]])}
+    echo -n "$var"
+}
+
+function checkRequired () {
+    clear
+	echo \#\#\# "$scriptName" \#\#\#
+	echo by CorpNewt
+	echo 
+    echo Trying to download list...
+    echo
+    
+    backup="No"
+    local=""
+    
+    if [[ -e "$DIR/github-checksums.txt" ]]; then
+        # Move existing file to temp location
+        backup="Yes"
+        tStamp="$( getTimestamp )"
+        mv "$DIR/github-checksums.txt" "$DIR/github-checksums-$tStamp.txt"
+    fi
+    
+    curl $url -o "$DIR/github-checksums.txt"
+    
+    if [[ "$?" == "0" ]]; then
+        # Download successful - remove the backup if exists
+        if [[ "$backup" == "Yes" ]]; then
+            rm "$DIR/github-checksums-$tStamp.txt"
+        fi
+        local="$DIR/github-checksums.txt"
+    else
+        # Download failed - restore the backup if exists
+        if [[ "$backup" == "Yes" ]]; then
+            mv "$DIR/github-checksums-$tStamp.txt" "$DIR/github-checksums.txt"
+            local="$DIR/github-checksums.txt"
+        fi
+    fi
+    
+    if [[ "$local" == "" ]]; then
+        # We didn't download the file successfully
+        if [[ -e "$DIR/$localFile" ]]; then
+            # We have a local file - we'll use that
+            local="$DIR/$localFile"
+        fi
+    fi
+    
+    # Last check to see if we found anything
+    if [[ "$local" == "" ]]; then
+        # Rats - no dice... error out
+        customQuit "Unable to download shasum list, and no local $localFile available."
+    fi
+    
+    main "$local"
+}
+
+function customQuit () {
+	clear
+	echo \#\#\# "$scriptName" \#\#\#
+	echo by CorpNewt
+	echo 
+    
+    if [[ ! -z "$1" ]]; then
+        echo "$1"
+        echo
+    fi
+    
+	echo Thanks for testing it out, for bugs/comments/complaints
+	echo send me a message on Reddit, or check out my GitHub:
+	echo 
+	echo www.reddit.com/u/corpnewt
+	echo www.github.com/corpnewt
+	echo 
+	echo Have a nice day/night!
+	echo 
+	echo 
+	shopt -u extglob
+	shopt -u nocasematch
+	exit $?
+}
+
+function displayWarning () {
+	clear
+	echo \#\#\# WARNING \#\#\#
+	echo 
+	echo This script is provided with NO WARRANTY whatsoever.
+	echo I am not responsible for ANY problems or issues you
+	echo may encounter, or any damages as a result of running
+	echo this script.
+	echo 
+	echo To ACCEPT this warning and FULL RESPONSIBILITY for
+	echo using this script, press [enter].
+	echo 
+	read -p "To REFUSE, close this script."
+	checkRequired
+}
+
+function getTimestamp () {
+    date +%Y%m%d_%H%M%S%Z
+}
+
+displayWarning
