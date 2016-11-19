@@ -90,7 +90,7 @@ Could not get checksum for:
         quitMessage="$( cat << EOF
 Unknown OS X/macOS version:
    "$shasum"
-   matched none of the entries in "$2." )"
+   matched none of the entries in "$( basename "$2" )". )"
         customQuit "$quitMessage"
     fi
     # We found it - trim whitespace and display
